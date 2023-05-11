@@ -26,7 +26,7 @@ def parse_camera_msg(msg):
     return img_msg
 
 
-def load_map(mappaths, images, distances, trans, times, source_align):
+def load_map(mappaths, images, distances):
     if "," in mappaths:
         mappaths = mappaths.split(",")
     else:
@@ -40,47 +40,19 @@ def load_map(mappaths, images, distances, trans, times, source_align):
         tmp.sort(key=lambda x: float(x))
         tmp_images = []
         tmp_distances = []
-        tmp_trans = []
-        tmp_times = []
-        tmp_align = []
-        source_map = None
 
         for idx, dist in enumerate(tmp):
             tmp_distances.append(float(dist))
             with open(os.path.join(mappath, dist + ".npy"), 'rb') as fp:
                 map_point = np.load(fp, allow_pickle=True, fix_imports=False).item(0)
                 r = map_point["representation"]
-                ts = map_point["timestamp"]
-                diff_hist = map_point["diff_hist"]
-                # this logic is for using multiple map - all maps must have same source map
-                if map_point["source_map_align"] is None:
-                    sm = mappath
-                else:
-                    sm = map_point["source_map_align"][0]
-                if source_map is None:
-                    source_map = sm
-                if sm != source_map:
-                    rospy.logwarn("Multimap with invalid target!" + str(mappath))
-                    raise Exception("Invalid map combination")
-                if map_point["source_map_align"] is not None:
-                    align = map_point["source_map_align"][1]
-                else:
-                    align = 0
                 feature = Features()
                 feature.shape = r.shape
                 feature.values = list(r.flatten())
                 tmp_images.append(feature)
-                tmp_times.append(ts)
-                tmp_align.append(align)
-                if diff_hist is not None:
-                    tmp_trans.append(diff_hist)
                 rospy.loginfo("Loaded feature: " + dist + str(".npy"))
-        tmp_times[-1] = tmp_times[-2] + (tmp_times[-2] - tmp_times[-3])  # to avoid very long period before map end
         images.append(tmp_images)
         distances.append(tmp_distances)
-        trans.append(tmp_trans)
-        times.append(tmp_times)
-        source_align.append(tmp_align)
         rospy.logwarn("Whole map " + str(mappath) + " sucessfully loaded")
 
 
@@ -95,24 +67,18 @@ class ActionServer():
         self.nextStep = 0
         self.bag = None
         self.isRepeating = False
-        self.fileList = []
         self.endPosition = 1.0
         self.clockGain = 1.0
         self.curr_dist = 0.0
         self.map_images = []
         self.map_distances = []
-        self.map_alignments = []
         self.action_dists = None
-        self.map_times = []
-        self.actions = []
         self.map_publish_span = 1
-        self.map_transitions = []
-        self.use_distances = False
+        self.use_distances = True
         self.distance_finish_offset = 0.2
-        self.curr_map = 0
         self.map_num = 0
-        self.last_map = 0
         self.nearest_map_img = -1
+        self.curr_map = 0
 
         rospy.logdebug("Waiting for services to become available...")
         rospy.wait_for_service("repeat/set_dist")
@@ -128,6 +94,8 @@ class ActionServer():
         self.sensors_pub = rospy.Publisher("map_representations", SensorsInput, queue_size=1)
 
         rospy.logdebug("Setting up published for commands")
+        self.joy_sub = rospy.Subscriber("/joy_secondary/joy", Joy, self.play_action)
+
         self.joy_topic = "map_vel"
         self.joy_pub = rospy.Publisher(self.joy_topic, Twist, queue_size=1)
 
@@ -152,11 +120,7 @@ class ActionServer():
             # Load data from each map the map
             features = []
             distances = []
-            timestamps = []
-            offsets = []
-            transitions = []
             last_nearest_img = self.nearest_map_img
-            map_indices = []
             for map_idx in range(self.map_num):
                 self.nearest_map_img = np.argmin(abs(self.curr_dist - np.array(self.map_distances[map_idx])))
                 # allow only move in map by one image per iteration
@@ -165,33 +129,18 @@ class ActionServer():
 
                 features.extend(self.map_images[map_idx][lower_bound:upper_bound])
                 distances.extend(self.map_distances[map_idx][lower_bound:upper_bound])
-                timestamps.extend(self.map_times[map_idx][lower_bound:upper_bound])
-                offsets.extend(self.map_alignments[map_idx][lower_bound:upper_bound])
-                transitions.extend(self.map_transitions[map_idx][lower_bound:upper_bound - 1])
-                map_indices.extend([map_idx for i in range(upper_bound - lower_bound)])
             if self.nearest_map_img != last_nearest_img:
                 rospy.loginfo("matching image " + str(self.map_distances[-1][self.nearest_map_img]) +
                               " at distance " + str(self.curr_dist))
-            transitions = np.array(transitions)
             # Create message for estimators
             sns_in = SensorsInput()
             sns_in.header.stamp = rospy.Time.now()
             sns_in.live_features = []
             sns_in.map_features = features
             sns_in.map_distances = distances
-            sns_in.map_transitions = [Features(transitions.flatten(), transitions.shape)]
-            sns_in.map_timestamps = timestamps
-            sns_in.map_num = self.map_num
-            # TODO: sns_in.map_similarity
-            sns_in.map_offset = offsets
 
             # rospy.logwarn("message created")
             self.sensors_pub.publish(sns_in)
-            self.last_map = self.curr_map
-
-            # rospy.logwarn("Image published!")
-            # DEBUGGING
-            # self.debug_map_img.publish(self.map_images[nearest_map_idx])
 
     def distanceCB(self, msg):
         if self.isRepeating == False:
@@ -201,7 +150,6 @@ class ActionServer():
         #     rospy.logwarn("Warning: no image received")
 
         self.curr_dist = msg.output
-        self.curr_map = msg.map
 
         if self.curr_dist >= (
                 self.map_distances[self.curr_map][-1] - self.distance_finish_offset) and self.use_distances or \
@@ -212,9 +160,6 @@ class ActionServer():
                 self.action_dists = []
                 self.actions = []
             self.shutdown()
-
-        if self.use_distances:
-            self.play_closest_action()
 
         self.pubSensorsInput()
 
@@ -265,31 +210,16 @@ class ActionServer():
         self.map_images = []
         self.map_distances = []
         self.action_dists = None
-        self.actions = []
-        self.map_transitions = []
-        self.last_closest_idx = 0
-        self.map_alignments = []
 
-        map_loader = threading.Thread(target=load_map, args=(goal.mapName, self.map_images, self.map_distances,
-                                                             self.map_transitions, self.map_times, self.map_alignments))
+        map_loader = threading.Thread(target=load_map, args=(goal.mapName, self.map_images, self.map_distances))
         map_loader.start()
         # TODO: Here we are waiting for th thread to join, so it does not make sense to use separate thread
         map_loader.join()
-        self.map_num = len(self.map_images)
+        self.map_num = 1
 
         rospy.logwarn("Starting repeat")
         self.bag = rosbag.Bag(os.path.join(map_name, map_name + ".bag"), "r")
         self.mapName = goal.mapName
-        self.use_distances = goal.useDist
-
-        # create publishers
-        additionalPublishers = {}
-        rospy.logwarn(self.savedOdomTopic)
-        # for topic, message, ts in self.bag.read_messages():
-        #     if topic is not self.savedOdomTopic:
-        #         topicType = self.bag.get_type_and_topic_info()[1][topic][0]
-        #         topicType = roslib.message.get_message_class(topicType)
-        #         additionalPublishers[topic] = rospy.Publisher(topic, topicType, queue_size=1)
 
         self.distance_reset_srv(goal.startPos, self.map_num)
         self.curr_dist = goal.startPos
@@ -297,11 +227,6 @@ class ActionServer():
         self.isRepeating = True
         # kick into the robot at the beggining:
         rospy.loginfo("Repeating started!")
-        if self.use_distances:
-            self.parse_rosbag()
-            self.play_closest_action()
-        else:
-            self.replay_timewise(additionalPublishers)  # for timewise repeating
 
         # self.shutdown() only for sth
         result.success = True
@@ -331,66 +256,12 @@ class ActionServer():
         if self.bag is not None:
             self.bag.close()
 
-    def replay_timewise(self, additionalPublishers):
-        # replay bag
-        rospy.logwarn("Starting")
-        previousMessageTime = None
-        expectedMessageTime = None
-        start = rospy.Time.now()
-        for topic, message, ts in self.bag.read_messages():
-            # rosbag virtual clock
-            now = rospy.Time.now()
-            if previousMessageTime is None:
-                previousMessageTime = ts
-                expectedMessageTime = now
-            else:
-                simulatedTimeToGo = ts - previousMessageTime
-                correctedSimulatedTimeToGo = simulatedTimeToGo * self.clockGain
-                error = now - expectedMessageTime
-                sleepTime = correctedSimulatedTimeToGo - error
-                expectedMessageTime = now + sleepTime
-                rospy.sleep(sleepTime)
-                previousMessageTime = ts
-            # publish
-            if topic == "recorded_actions":
-                self.joy_pub.publish(message.twist)
-            else:
-                additionalPublishers[topic].publish(message)
-            msgBuf = (topic, message)
-            if self.isRepeating == False:
-                rospy.loginfo("stopped!")
-                break
-            if rospy.is_shutdown():
-                rospy.loginfo("Node Shutdown")
-                result = MapRepeaterResult()
-                result.success = False
-                self.server.set_succeeded(result)
-                return
-        self.isRepeating = False
-        end = rospy.Time.now()
-        dur = end - start
-        rospy.logwarn("Rosbag runtime: %f" % (dur.to_sec()))
-
-    def parse_rosbag(self):
-        rospy.logwarn("Starting to parse the actions")
-        self.action_dists = []
-        self.action_times = []
-        for topic, msg, t in self.bag.read_messages(topics=["recorded_actions"]):
-            self.action_dists.append(float(msg.distance))
-            self.actions.append(msg.twist)
-        self.action_dists = np.array(self.action_dists)
-        rospy.logwarn("Actions and distances successfully loaded!")
-
-    def play_closest_action(self):
-        # TODO: Does not support additional topics
-        if len(self.action_dists) > 0:
-            distance_to_pos = abs(self.curr_dist - self.action_dists)
-            closest_idx = np.argmin(distance_to_pos)
-            # rospy.loginfo("replaying action at: " + str(closest_idx))
-            if self.isRepeating:
-                self.joy_pub.publish(self.actions[closest_idx])
-        else:
-            rospy.logwarn("No action available")
+    def play_action(self, msg):
+        forward_action = msg.axes[1]
+        out = Twist()
+        out.linear.x = forward_action
+        if self.isRepeating:
+            self.joy_pub.publish(out)
 
 
 if __name__ == '__main__':
