@@ -19,15 +19,16 @@ import matplotlib.pyplot as plt
 
 device = t.device("cuda") if t.cuda.is_available() else t.device("cpu")
 
-EPOCHS = 1000
-EVAL_RATE = 1
+EPOCHS = 100
+EVAL_RATE = 10
 BATCH_SIZE = 10
 REPR_SIZE = (1, 16, 6, 64)
-LR = 0.01
+LR = 0.003
 PAD = 32
 
-dataset = SingleReprDataset(path="/home/zdeeno/Documents/Datasets/generalize/kn_corridor", subfolder_list=["c1", "c2"],
-                            flip_list=[0, 0])
+dataset = SingleReprDataset(path="/home/zdeeno/Documents/Datasets/generalize/kn_corridor",
+                            subfolder_list=["c1", "c2", "c1", "c2"],
+                            flip_list=[0, 0, 1, 1])
 train_loader = DataLoader(dataset, BATCH_SIZE, shuffle=True)
 
 
@@ -81,7 +82,7 @@ init_tensor /= rounds
 
 
 # trained_repr = LearnedRepr(init_tensor=init_tensor).to(device)
-trained_repr = LearnedRepr(init_tensor=None).to(device)
+trained_repr = LearnedRepr(init_tensor=init_tensor).to(device)
 last_repr = trained_repr.trained_repr[0].detach()
 optimizer = Adam(trained_repr.parameters(), lr=LR)
 # loss = CrossEntropyLoss()
@@ -143,9 +144,9 @@ best_model = None
 for epoch in range(LOAD_EPOCH, EPOCHS):
     if epoch % EVAL_RATE == 0:
         err = eval_loop(epoch)
-        # if err < lowest_err:
-        #     lowest_err = err
-        #     best_model = copy.deepcopy(model)
-        #     save_model(model, NAME, err, optimizer)
+        out_repr = trained_repr.trained_repr.detach().numpy()[0]
+        struct_save = {"representation": out_repr}
+        with open("./results_generalize/repr" + str(epoch) + ".npy", 'wb') as fp:
+            np.save(fp, struct_save, fix_imports=False)
 
     train_loop(epoch)

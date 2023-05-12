@@ -63,8 +63,8 @@ class SingleReprDataset(Dataset):
         if self.flip[idx] == 0:
             return repr_out
         elif self.flip[idx] == 1:
-            # TODO force flip here
-            return repr_out
+            tmp = np.copy(repr_out[..., ::-1])
+            return tmp
         elif self.flip[idx] == 2:
             # TODO random flip
             return repr_out
