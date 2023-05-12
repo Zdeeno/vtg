@@ -11,9 +11,9 @@ import queue
 from sensor_msgs.msg import Image, Joy
 from geometry_msgs.msg import Twist
 from std_msgs.msg import Float64
-from bearnav2.msg import MapRepeaterAction, MapRepeaterResult, SensorsInput, SensorsOutput, ImageList, FeaturesList, \
+from vtg.msg import MapRepeaterAction, MapRepeaterResult, SensorsInput, SensorsOutput, ImageList, FeaturesList, \
     Features
-from bearnav2.srv import SetDist, SetClockGain, SetClockGainResponse, Alignment, Representations
+from vtg.srv import SetDist, SetClockGain, SetClockGainResponse, Alignment, Representations
 import numpy as np
 import ros_numpy
 
@@ -76,9 +76,11 @@ class ActionServer():
         self.map_publish_span = 1
         self.use_distances = True
         self.distance_finish_offset = 0.2
-        self.map_num = 0
+        self.map_num = 1
         self.nearest_map_img = -1
         self.curr_map = 0
+        self.map = 0
+        self.forward_action = 0.0
 
         rospy.logdebug("Waiting for services to become available...")
         rospy.wait_for_service("repeat/set_dist")
@@ -98,6 +100,8 @@ class ActionServer():
 
         self.joy_topic = "map_vel"
         self.joy_pub = rospy.Publisher(self.joy_topic, Twist, queue_size=1)
+
+        self.joy_rate = rospy.Timer(rospy.Duration(0.05), self.pub_joy)
 
         rospy.logdebug("Starting repeater server")
         self.server = actionlib.SimpleActionServer("repeater", MapRepeaterAction, execute_cb=self.actionCB,
@@ -196,7 +200,6 @@ class ActionServer():
             return
 
         map_name = goal.mapName.split(",")[0]
-        self.parseParams(os.path.join(map_name, "params"))
 
         self.map_publish_span = int(goal.imagePub)
 
@@ -218,7 +221,6 @@ class ActionServer():
         self.map_num = 1
 
         rospy.logwarn("Starting repeat")
-        self.bag = rosbag.Bag(os.path.join(map_name, map_name + ".bag"), "r")
         self.mapName = goal.mapName
 
         self.distance_reset_srv(goal.startPos, self.map_num)
@@ -257,9 +259,11 @@ class ActionServer():
             self.bag.close()
 
     def play_action(self, msg):
-        forward_action = msg.axes[1]
+        self.forward_action = max(msg.axes[1], 0.0)
+
+    def pub_joy(self, timer):
         out = Twist()
-        out.linear.x = forward_action
+        out.linear.x = self.forward_action
         if self.isRepeating:
             self.joy_pub.publish(out)
 

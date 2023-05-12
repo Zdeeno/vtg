@@ -2,8 +2,8 @@ import numpy as np
 from base_classes import DisplacementEstimator, RelativeDistanceEstimator, AbsoluteDistanceEstimator, \
     SensorFusion, ProbabilityDistanceEstimator, RepresentationsCreator
 import rospy
-from bearnav2.srv import Alignment, AlignmentResponse, SetDist, SetDistResponse
-from bearnav2.msg import FloatList, SensorsInput, ImageList
+from vtg.srv import Alignment, AlignmentResponse, SetDist, SetDistResponse
+from vtg.msg import FloatList, SensorsInput, ImageList
 from scipy import interpolate
 
 """
@@ -18,6 +18,8 @@ class BearnavClassic(SensorFusion):
                  repr_creator: RepresentationsCreator, rel_align_est: DisplacementEstimator):
         super().__init__(type_prefix, abs_align_est=abs_align_est, abs_dist_est=abs_dist_est,
                          rel_align_est=rel_align_est, repr_creator=repr_creator)
+        self.map = 0
+        self.map_num = 1
 
     def _process_rel_alignment(self, msg):
         histogram = self.rel_align_est.displacement_message_callback(msg.input)
@@ -28,7 +30,7 @@ class BearnavClassic(SensorFusion):
     def _process_abs_alignment(self, msg):
         # if msg.map_features[0].shape[0] > 1:
         #     rospy.logwarn("Bearnav classic can process only one image")
-        histogram = np.array(msg.live_features[0].values).reshape(msg.live_features[0].shape)
+        histogram = np.array(msg.map_features[0].values).reshape(msg.map_features[0].shape)
         self.alignment = (np.argmax(histogram) - np.size(histogram) // 2) / (np.size(histogram) // 2)
         rospy.loginfo("Current displacement: " + str(self.alignment))
         # self.publish_align()

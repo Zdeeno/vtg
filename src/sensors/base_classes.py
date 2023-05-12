@@ -1,9 +1,9 @@
 from abc import ABC, abstractmethod
 import numpy as np
 from std_msgs.msg import Float32
-from bearnav2.msg import SensorsOutput, ImageList, Features
+from vtg.msg import SensorsOutput, ImageList, Features
 import rospy
-from bearnav2.srv import SetDist, SetDistResponse, Representations, RepresentationsResponse
+from vtg.srv import SetDist, SetDistResponse, Representations, RepresentationsResponse
 from typing import List
 
 
@@ -250,6 +250,7 @@ class SensorFusion(ABC):
         else:
             out.output = 0.0
             out.output_uncertainty = -1.0
+        out.map = self.map
         self.output_align.publish(out)
 
     def set_distance(self, msg: SetDist) -> SetDistResponse:
