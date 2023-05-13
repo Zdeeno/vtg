@@ -30,9 +30,17 @@ class BearnavClassic(SensorFusion):
     def _process_abs_alignment(self, msg):
         # if msg.map_features[0].shape[0] > 1:
         #     rospy.logwarn("Bearnav classic can process only one image")
-        histogram = np.array(msg.map_features[0].values).reshape(msg.map_features[0].shape)
+        
+        histograms = np.array([np.array(msg.map_features[i].values).reshape(msg.map_features[i].shape) for i in range(len(msg.map_features))])[0]
+        best_hist_idx = np.argmax(np.max(histograms, axis=-1))
+        histogram = histograms[best_hist_idx]
         self.alignment = (np.argmax(histogram) - np.size(histogram) // 2) / (np.size(histogram) // 2)
-        rospy.loginfo("Current displacement: " + str(self.alignment))
+        rospy.loginfo("Current displacement: " + str(self.alignment) + ", Best hist idx: " + str(best_hist_idx))
+
+        # --------------- single histogram --------- 
+        # histogram = np.array(msg.map_features[0].values).reshape(msg.map_features[0].shape)
+        # self.alignment = (np.argmax(histogram) - np.size(histogram) // 2) / (np.size(histogram) // 2)
+        # rospy.loginfo("Current displacement: " + str(self.alignment))
         # self.publish_align()
 
     def _process_rel_distance(self, msg):

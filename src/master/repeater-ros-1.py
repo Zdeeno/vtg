@@ -101,7 +101,7 @@ class ActionServer():
         self.joy_topic = "map_vel"
         self.joy_pub = rospy.Publisher(self.joy_topic, Twist, queue_size=1)
 
-        self.joy_rate = rospy.Timer(rospy.Duration(0.05), self.pub_joy)
+        self.joy_rate = rospy.Timer(rospy.Duration(0.01), self.pub_joy)
 
         rospy.logdebug("Starting repeater server")
         self.server = actionlib.SimpleActionServer("repeater", MapRepeaterAction, execute_cb=self.actionCB,
