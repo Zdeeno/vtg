@@ -58,6 +58,53 @@ class BearnavClassic(SensorFusion):
         raise Exception("Bearnav Classic does not support probability of distances")
 
 
+class SemanticEstimation(SensorFusion):
+
+    def __init__(self, type_prefix: str,
+                 abs_align_est: DisplacementEstimator, abs_dist_est: AbsoluteDistanceEstimator,
+                 repr_creator: RepresentationsCreator, rel_align_est: DisplacementEstimator):
+        super().__init__(type_prefix, abs_align_est=abs_align_est, abs_dist_est=abs_dist_est,
+                         rel_align_est=rel_align_est, repr_creator=repr_creator)
+        self.map = 0
+        self.map_num = 1
+
+    def _process_rel_alignment(self, msg):
+        histogram = self.rel_align_est.displacement_message_callback(msg.input)
+        out = AlignmentResponse()
+        out.histograms = histogram
+        return out
+
+    def _process_abs_alignment(self, msg):
+        # if msg.map_features[0].shape[0] > 1:
+        #     rospy.logwarn("Bearnav classic can process only one image")
+
+        histograms = np.array([np.array(msg.map_features[i].values).reshape(msg.map_features[i].shape) for i in range(len(msg.map_features))])[0]
+        best_hist_idx = np.argmax(np.max(histograms, axis=-1))
+        histogram = histograms[best_hist_idx]
+        self.alignment = (np.argmax(histogram) - np.size(histogram) // 2) / (np.size(histogram) // 2)
+        rospy.loginfo("Current displacement: " + str(self.alignment) + ", Best hist idx: " + str(best_hist_idx))
+        self.distance = best_hist_idx
+        self.header = self.abs_dist_est.header
+
+        # --------------- single histogram ---------
+        # histogram = np.array(msg.map_features[0].values).reshape(msg.map_features[0].shape)
+        # self.alignment = (np.argmax(histogram) - np.size(histogram) // 2) / (np.size(histogram) // 2)
+        # rospy.loginfo("Current displacement: " + str(self.alignment))
+        # self.publish_align()
+
+    def _process_rel_distance(self, msg):
+        rospy.logerr("This function is not available for this fusion class")
+        raise Exception("SemanticEstimation does not support relative distance")
+
+    def _process_abs_distance(self, msg):
+        rospy.logerr("This function is not available for this fusion class")
+        raise Exception("SemanticEstimation does not support relative distance")
+
+    def _process_prob_distance(self, msg):
+        rospy.logerr("This function is not available for this fusion class")
+        raise Exception("SemanticEstimation does not support probability of distances")
+
+
 class VisualOnly(SensorFusion):
 
     def __init__(self, type_prefix: str,

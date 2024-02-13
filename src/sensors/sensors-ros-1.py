@@ -2,7 +2,7 @@
 
 import rospy
 from vtg.srv import Alignment, AlignmentResponse, Representations, RepresentationsResponse
-from sensor_processing import BearnavClassic, PF2D, VisualOnly
+from sensor_processing import BearnavClassic, PF2D, VisualOnly, SemanticEstimation
 from backends.odometry.odom_dist import OdometryAbsolute, OdometryRelative
 from backends.siamese.siamese import SiameseCNN
 from backends.crosscorrelation.crosscorr import CrossCorrelation
@@ -65,7 +65,13 @@ if __name__ == '__main__':
     repeat_handlers = start_subscribes(repeat_fusion,
                                        "matched_repr", odom_topic, "", "",
                                        "", "")
-    # 2) Particle filter 2D - parameters are really important
+
+    # 2) Semantic localization - this method also needs publishing span 0 in the repeater !!!
+    # repeat_fusion = SemanticEstimation("repeat", align_abs, dist_abs, align_abs, None)
+    # repeat_handlers = start_subscribes(repeat_fusion,
+    #                                    "matched_repr", odom_topic, "", "",
+    #                                    "", "")
+    # 3) Particle filter 2D - parameters are really important
     # repeat_fusion = PF2D(type_prefix="repeat", particles_num=600, odom_error=0.05, odom_init_std=1.0, align_beta=30.0,
     #                      align_init_std=0.3, particles_frac=1, choice_beta=3.0, add_random=0.1, debug=True,
     #                      abs_align_est=align_abs, rel_align_est=align_rel, rel_dist_est=dist_rel,
@@ -73,7 +79,7 @@ if __name__ == '__main__':
     # repeat_handlers = start_subscribes(repeat_fusion,
     #                                    "matched_repr", "", odom_topic, "",
     #                                    "local_alignment", "")
-    # 3) Visual Only
+    # 4) Visual Only
     # repeat_fusion = VisualOnly("repeat", align_abs, align_abs, align_abs)
     # repeat_handler = start_subscribes(repeat_fusion,
     #                                   "matched_repr", "", "", "sensors_input",

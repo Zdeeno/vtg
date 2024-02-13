@@ -24,19 +24,24 @@ class RepresentationMatching:
         rospy.init_node("sensor_processing")
         rospy.loginfo("Sensor processing started!")
         camera_topic = rospy.get_param("~camera_topic")
+        camera_topic2 = rospy.get_param("~second_camera_topic")
 
         # Choose sensor method
 
         self.align_abs = SiameseCNN(padding=PAD, resize_w=RESIZE_W)
         self.pub = rospy.Publisher("live_representation", FeaturesList, queue_size=1)
         self.pub_match = rospy.Publisher("matched_repr", SensorsInput, queue_size=1)
-        self.sub = rospy.Subscriber(camera_topic, Image,
-                                    self.image_parserCB, queue_size=1, buff_size=50000000)
+        self.sub1 = rospy.Subscriber(camera_topic, Image,
+                                     self.image_parserCB, queue_size=1, buff_size=50000000)
+        if camera_topic2 != "":
+            self.sub2 = rospy.Subscriber(camera_topic2, Image,
+                                         self.image_parserCB, queue_size=1, buff_size=50000000)
         self.map_sub = rospy.Subscriber("map_representations", SensorsInput,
                                         self.map_parserCB, queue_size=1, buff_size=50000000)
 
         self.last_live = None
         self.sns_in_msg = None
+        self.second_cam_img_msg = None
         rospy.spin()
 
     def parse_camera_msg(self, msg):
@@ -50,6 +55,7 @@ class RepresentationMatching:
         img_msg, _ = self.parse_camera_msg(image)
         msg = ImageList([img_msg])
         live_feature = self.align_abs._to_feature(msg)
+
         tmp_sns_in = self.sns_in_msg
 
         if self.last_live is None:
@@ -70,8 +76,16 @@ class RepresentationMatching:
         # decode these
         align_out = SensorsInput()
 
-        live_hist = np.array(out[-1])  # all live map distances vs live img
-        map_hist = np.array(out[:-1])
+        live_hist = np.array(out[-1])
+        map_hist = np.array(out[:-1])  # all live map distances vs live img
+
+        if self.second_cam_img_msg is not None:
+            second_live_feature = self.align_abs._to_feature(msg)
+            second_align_in = SensorsInput()
+            second_align_in.map_features = tmp_sns_in.map_features
+            align_in.live_features = second_live_feature
+            second_out = self.align_abs.process_msg(align_in)
+            map_hist = np.concatenate([map_hist, second_out], axis=0)
 
         # create publish msg
         align_out.header = image.header
@@ -87,6 +101,10 @@ class RepresentationMatching:
         # rospy.logwarn("sending: " + str(hists.shape) + " " + str(tmp_sns_in.map_distances))
         self.pub_match.publish(align_out)
         self.last_live = live_feature[0]
+
+    def second_cam_cb(self, image):
+        self.second_cam_img_msg, _ = ImageList([self.parse_camera_msg(image)])
+
 
     def map_parserCB(self, sns_in):
         self.sns_in_msg = sns_in
