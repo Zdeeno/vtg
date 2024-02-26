@@ -35,7 +35,7 @@ class RepresentationMatching:
                                      self.image_parserCB, queue_size=1, buff_size=50000000)
         if camera_topic2 != "":
             self.sub2 = rospy.Subscriber(camera_topic2, Image,
-                                         self.image_parserCB, queue_size=1, buff_size=50000000)
+                                         self.second_cam_cb, queue_size=1, buff_size=50000000)
         self.map_sub = rospy.Subscriber("map_representations", SensorsInput,
                                         self.map_parserCB, queue_size=1, buff_size=50000000)
 
@@ -69,7 +69,8 @@ class RepresentationMatching:
         # match live vs. live map, live vs last live, live vs maps
         ext_tensor = [*tmp_sns_in.map_features, self.last_live]
         align_in = SensorsInput()
-        align_in.map_features = ext_tensor
+        # BEWARE THIS HOTFIX ---------------- 
+        align_in.map_features = tmp_sns_in.map_features
         align_in.live_features = live_feature
         out = self.align_abs.process_msg(align_in)
 
@@ -77,21 +78,23 @@ class RepresentationMatching:
         align_out = SensorsInput()
 
         live_hist = np.array(out[-1])
-        map_hist = np.array(out[:-1])  # all live map distances vs live img
+        # map_hist = np.array(out[:-1])  # all live map distances vs live img
+        map_hist = np.array(out)
+        # -----------------------------------
 
         if self.second_cam_img_msg is not None:
-            second_live_feature = self.align_abs._to_feature(msg)
+            second_live_feature = self.align_abs._to_feature(self.second_cam_img_msg)
             second_align_in = SensorsInput()
             second_align_in.map_features = tmp_sns_in.map_features
-            align_in.live_features = second_live_feature
-            second_out = self.align_abs.process_msg(align_in)
+            second_align_in.live_features = second_live_feature
+            second_out = np.array(self.align_abs.process_msg(second_align_in))
             map_hist = np.concatenate([map_hist, second_out], axis=0)
 
         # create publish msg
         align_out.header = image.header
         align_out.live_features = [Features(live_hist.flatten(), live_hist.shape)]  # now it is list of histogram, not features
         align_out.map_features = [Features(map_hist.flatten(), map_hist.shape)]     # this too
-        align_out.map_distances = tmp_sns_in.map_distances
+        align_out.map_distances = [0.0, *tmp_sns_in.map_distances]
         align_out.map_transitions = tmp_sns_in.map_transitions                      # also list of histograms
         align_out.map_timestamps = tmp_sns_in.map_timestamps
         align_out.map_num = tmp_sns_in.map_num
@@ -103,8 +106,8 @@ class RepresentationMatching:
         self.last_live = live_feature[0]
 
     def second_cam_cb(self, image):
-        self.second_cam_img_msg, _ = ImageList([self.parse_camera_msg(image)])
-
+        tmp, _ = self.parse_camera_msg(image)
+        self.second_cam_img_msg = ImageList([tmp])
 
     def map_parserCB(self, sns_in):
         self.sns_in_msg = sns_in

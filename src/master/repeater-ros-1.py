@@ -96,7 +96,7 @@ class ActionServer():
         self.sensors_pub = rospy.Publisher("map_representations", SensorsInput, queue_size=1)
 
         rospy.logdebug("Setting up published for commands")
-        self.joy_sub = rospy.Subscriber("/joy_secondary/joy", Joy, self.play_action)
+        self.joy_sub = rospy.Subscriber("/bluetooth_teleop/joy", Joy, self.play_action)
 
         self.joy_topic = "map_vel"
         self.joy_pub = rospy.Publisher(self.joy_topic, Twist, queue_size=1)
@@ -231,6 +231,8 @@ class ActionServer():
         rospy.loginfo("Repeating started!")
 
         # self.shutdown() only for sth
+        while self.isRepeating:
+            rospy.sleep(0.25)
         result.success = True
         self.server.set_succeeded(result)
 
@@ -263,7 +265,8 @@ class ActionServer():
 
     def pub_joy(self, timer):
         out = Twist()
-        out.linear.x = self.forward_action
+        # out.linear.x = self.forward_action
+        out.linear.x = 1.5
         if self.isRepeating:
             self.joy_pub.publish(out)
 
