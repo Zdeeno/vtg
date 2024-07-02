@@ -59,7 +59,8 @@ class SingleReprDataset(Dataset):
         # print(self.dataset[idx])
         repr_out = np.load(self.dataset[idx], allow_pickle=True).item(0)["representation"]
         # repr_out = repr_out.
-        # print(repr_out.shape)
+        if type(repr_out) is list:
+            repr_out = repr_out[0]
         if self.flip[idx] == 0:
             return repr_out
         elif self.flip[idx] == 1:
