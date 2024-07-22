@@ -8,4 +8,4 @@ Code is derived from [PFVT&R](https://github.com/Zdeeno/pfvtr) and [Siamese netw
 
 ## Video describing the method/experiment
 
-[![VTG VIDEO](https://img.youtube.com/vi/4YkyFYoKOXU/0.jpg)](https://www.youtube.com/watch?v=4YkyFYoKOXU)
+[![VTG VIDEO](https://img.youtube.com/vi/o8aHX1NsQ08/0.jpg)](https://www.youtube.com/watch?v=o8aHX1NsQ08)
