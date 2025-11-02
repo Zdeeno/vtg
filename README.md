@@ -1,6 +1,6 @@
 # Visual Teach and Generalize via Mean Representation
 
-ROS Noetic package implementation of VT&G based on mean representation - [paper](https://link.springer.com/article/10.1007/s10846-025-02302-8).
+ROS Noetic package implementation of VT&G based on mean representation - [paper](https://link.springer.com/article/10.1007/s10846-025-02302-8) (Authors: Rozsypálek, Rouček, Ulrich, Krajník; 2025).
 
 Original paper presenting VT&G [here](https://www.sciencedirect.com/science/article/pii/S0168169923004428).
 
